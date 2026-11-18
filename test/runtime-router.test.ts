@@ -179,8 +179,11 @@ describe('remote Workspace routing', () => {
     const fs = fakeFileSystem();
     const restore = installRemoteFileSystemRouter(
       fs as never,
-      path => path === '/anchors/project/src' ? 'ssh://gpu/home/atlas/project/src'
-        : path === 'app.ts' ? 'ssh://gpu/home/atlas/project/app.ts' : undefined,
+      path => path === '/anchors/project' ? 'ssh://gpu/home/atlas/project'
+        : path === '/anchors/project/src' ? 'ssh://gpu/home/atlas/project/src'
+          : path === 'app.ts' ? 'ssh://gpu/home/atlas/project/app.ts'
+          : path === '../remote-only.txt' ? 'ssh://gpu/home/atlas/remote-only.txt'
+            : path === 'space dir/中文 文件.txt' ? 'ssh://gpu/home/atlas/space dir/中文 文件.txt' : undefined,
       helpers as never,
     );
     try {
@@ -191,6 +194,14 @@ describe('remote Workspace routing', () => {
       await fs.lstat('app.ts', { cwd: '/anchors/project/src' }, new AbortController().signal);
       expect(calls.find(call => call.method === 'fs/stat')?.params.path)
         .toBe('home/atlas/project/src/app.ts');
+      calls.length = 0;
+      await fs.resolve('../remote-only.txt', { cwd: '/anchors/project/src' } as never);
+      expect(calls.find(call => call.method === 'fs/canonicalize')?.params.path)
+        .toBe('home/atlas/project/remote-only.txt');
+      calls.length = 0;
+      await fs.resolve('space dir/中文 文件.txt', { cwd: '/anchors/project' } as never);
+      expect(calls.find(call => call.method === 'fs/canonicalize')?.params.path)
+        .toBe('home/atlas/project/space dir/中文 文件.txt');
     } finally {
       restore();
     }
@@ -726,9 +737,11 @@ describe('OpenSSH process invocation', () => {
     // Mirrors AnchorRegistry.resolve(), which resolves a relative path against
     // the local DSH process cwd. That must not rewrite a remote-relative root.
     const relativeResolver = (path: string) => path === '.' ? 'ssh://gpu/home/atlas/project'
-      : path === 'src' || path === './src' ? 'ssh://gpu/home/atlas/project/src'
-        : undefined;
-    for (const root of ['.', 'src', './src']) {
+      : path === '..' ? 'ssh://gpu/home/atlas'
+        : path === 'src' || path === './src' || path === 'src/' ? 'ssh://gpu/home/atlas/project/src'
+          : path === '中文 空格' ? 'ssh://gpu/home/atlas/中文 空格'
+            : path === '-dash' ? 'ssh://gpu/home/atlas/-dash' : undefined;
+    for (const root of ['.', '..', 'src', 'src/', './src', '中文 空格', '-dash']) {
       const script = decodeRemoteScript(buildRemoteSshInvocation(
         childCwd,
         [packagedRg, '--json', '--regexp=x', '--', root],
