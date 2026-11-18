@@ -1,3 +1,4 @@
+import { isAbsolute as isHostAbsolute } from 'node:path';
 import FileSystem, { FsError, type FsTarget } from '@deepseek-ai/dsh-fs';
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox';
 import type {
@@ -49,6 +50,10 @@ export function installRemoteFileSystemRouter(
     if (path === undefined) return undefined;
     return isSshPath(path) ? path : resolveRemotePath(path);
   };
+  // A relative path is already interpreted by the remote provider against the
+  // remote cwd. Mapping it through the Host resolver would resolve it against
+  // the local DSH process cwd instead (e.g. a child agent at .../src).
+  const isRemotePathValue = (path: string) => isSshPath(path) || isHostAbsolute(path);
 
   const checkedRemoteWriteTarget = async (
     target: FsTarget,
@@ -91,7 +96,7 @@ export function installRemoteFileSystemRouter(
       return originalResolve.call(fs, process.cwd(), opts);
     }
     const remoteCwd = asRemotePath(opts?.cwd);
-    const remotePath = asRemotePath(path);
+    const remotePath = remoteCwd !== undefined && !isRemotePathValue(path) ? undefined : asRemotePath(path);
     if (remoteCwd !== undefined) {
       return remote.resolve(remotePath ?? path, { ...opts, cwd: remoteCwd });
     }
@@ -102,7 +107,7 @@ export function installRemoteFileSystemRouter(
   const originalLstat = remember('lstat');
   (fs as any).lstat = (path: string, opts?: { cwd?: string }, signal?: AbortSignal) => {
     const remoteCwd = asRemotePath(opts?.cwd);
-    const remotePath = asRemotePath(path);
+    const remotePath = remoteCwd !== undefined && !isRemotePathValue(path) ? undefined : asRemotePath(path);
     if (remoteCwd !== undefined) {
       return remote.lstat(remotePath ?? path, { ...opts, cwd: remoteCwd }, signal);
     }
@@ -382,6 +387,11 @@ function remoteArgv(
   if (separator === rewritten.length - 1) return prepared(protect([...rewritten, '.']));
   return prepared(protect(rewritten.map((value, index) => {
     if (index <= separator) return value;
+    // A relative search root belongs to the remote command's cwd. Resolving it
+    // through the Host resolver would resolve it against the local DSH process
+    // cwd instead, so a child at .../src or a Session after `cd` would search
+    // the workspace root (or a sibling path) on the remote host.
+    if (!isSshPath(value) && !isHostAbsolute(value)) return value;
     const mapped = isSshPath(value) ? value : resolveRemotePath?.(value);
     if (mapped === undefined) return value;
     const mappedUri = parseSshUri(mapped);

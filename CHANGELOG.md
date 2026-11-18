@@ -3,9 +3,10 @@
 ## 0.13.9
 
 - 修复 `dsh headless` / CLI 从 SSH 工作区启动时会话 cwd 丢失主机身份：DSH 用 `fs.processPath(await fs.resolve("."))` 写入会话 header，插件曾把 anchor 规范化成裸远端 POSIX 路径，后续 glob/grep 因而在本机执行。现在保留本地 anchor，工作目录服务再按原主机恢复 SSH 身份。
-- 新增 router 回归，覆盖 headless 的 cwd 探针；显式远端目标和普通相对路径路由不变。真实独立 DSH 实例中，修复前 grep 在本机报 `EACCES`，修复后会话 cwd 保持 anchor 并由远端 ripgrep 返回远端路径。
+- 同轮审计修正相对路径：子代理或 `cd` 到子目录后，`grep`/`glob` 的显式相对 `path`（含 `.`）不再按本机 cwd 映射到工作区根；`read`/`write`/`edit` 的相对路径也交给远端 cwd 解释。补充 router 回归，并在子代理内验证相对读取、写入和搜索。
+- 真实独立 DSH 实例中，修复前 headless grep 在本机报 `EACCES`，修复后会话 cwd 保持 anchor 并由远端 ripgrep 返回远端路径；子代理继承和显式远端 `cwd` 均通过。
 - helper 仍为 0.13.5，内容哈希不变；无新增 Host RPC、运行依赖、安装步骤或权限放宽。
-- English: keep the local SSH anchor in the headless/CLI Session cwd probe so the official working-directory service can restore the SSH host before glob/grep run. Add a router regression and validate against an independent DSH instance and a real `ssh localhost` workspace. Helper, RPC surface and permissions are unchanged.
+- English: keep the local SSH anchor in the headless/CLI Session cwd probe so the official working-directory service can restore the SSH host before glob/grep run. Keep explicit relative `grep`/`glob` roots and relative `read`/`write`/`edit` paths relative to the remote Session cwd, including child agents and `cd` subdirectories. Add router regressions and validate on an independent DSH instance and a real `ssh localhost` workspace. Helper, RPC surface and permissions are unchanged.
 
 ## 0.13.8
 

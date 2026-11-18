@@ -163,6 +163,39 @@ describe('remote Workspace routing', () => {
     }
   });
 
+  it('keeps relative filesystem paths relative to the remote session cwd', async () => {
+    const calls: Array<{ method: string; params: any }> = [];
+    const helpers = { client: vi.fn(async () => ({
+      sessionId: 'test',
+      capabilities: {},
+      call: async (method: string, params: any) => {
+        calls.push({ method, params });
+        if (method === 'workspace/open') return { workspaceId: params.workspaceId, path: params.path };
+        if (method === 'fs/canonicalize') return { path: params.path };
+        if (method === 'fs/stat') return { exists: true, metadata: { type: 'file', size: 1, version: 'v1' } };
+        throw new Error(method);
+      },
+    })) };
+    const fs = fakeFileSystem();
+    const restore = installRemoteFileSystemRouter(
+      fs as never,
+      path => path === '/anchors/project/src' ? 'ssh://gpu/home/atlas/project/src'
+        : path === 'app.ts' ? 'ssh://gpu/home/atlas/project/app.ts' : undefined,
+      helpers as never,
+    );
+    try {
+      await fs.resolve('app.ts', { cwd: '/anchors/project/src' } as never);
+      expect(calls.find(call => call.method === 'fs/canonicalize')?.params.path)
+        .toBe('home/atlas/project/src/app.ts');
+      calls.length = 0;
+      await fs.lstat('app.ts', { cwd: '/anchors/project/src' }, new AbortController().signal);
+      expect(calls.find(call => call.method === 'fs/stat')?.params.path)
+        .toBe('home/atlas/project/src/app.ts');
+    } finally {
+      restore();
+    }
+  });
+
   it('fails closed for remote writes under read-only or outside-workspace policy', async () => {
     const fs = fakeFileSystem();
     Object.defineProperty(fs, 'sandboxMode', { value: 'workspace-write' });
@@ -686,6 +719,25 @@ describe('OpenSSH process invocation', () => {
     const binary = '/tools/@vscode-custom/not-ripgrep/bin/rg';
     expect(decodeRemoteScript(buildRemoteSshInvocation(cwd, [binary, '--files'], undefined, false).at(-1)))
       .toContain(binary);
+  });
+
+  it('leaves relative ripgrep roots for the remote command cwd', () => {
+    const childCwd = 'ssh://gpu/home/atlas/project/src';
+    // Mirrors AnchorRegistry.resolve(), which resolves a relative path against
+    // the local DSH process cwd. That must not rewrite a remote-relative root.
+    const relativeResolver = (path: string) => path === '.' ? 'ssh://gpu/home/atlas/project'
+      : path === 'src' || path === './src' ? 'ssh://gpu/home/atlas/project/src'
+        : undefined;
+    for (const root of ['.', 'src', './src']) {
+      const script = decodeRemoteScript(buildRemoteSshInvocation(
+        childCwd,
+        [packagedRg, '--json', '--regexp=x', '--', root],
+        undefined,
+        false,
+        relativeResolver,
+      ).at(-1));
+      expect(script.endsWith(`'${root}'`), script).toBe(true);
+    }
   });
 
   it('maps a same-host SSH URI root without changing the search pattern', () => {
