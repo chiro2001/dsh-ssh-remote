@@ -1,11 +1,11 @@
-# 0.13.9 acceptance — headless SSH search
+# SSH path routing — branch verification
 
-Date: 2026-11-18. Plugin candidate: `0.13.9` built from the reviewed branch; helper `0.13.5` unchanged.
+Date: 2026-11-18. Verified branch: `fix/headless-session-cwd-search`; helper `0.13.5` unchanged. No release or tag was published for this verification.
 
 ## Environment
 
 - Independent DSH runtimes: `@deepseek-ai/dsh@0.2.1-rc.2` and `@deepseek-ai/dsh@0.2.2-rc.3`, installed under separate local prefixes. Neither used the globally installed DSH.
-- Separate `DSH_HOME` and profiles for every runtime; the plugin was installed from the candidate `.tgz` into the `headless` profile.
+- Separate `DSH_HOME` and profiles for every runtime; the plugin was installed from a locally packed `.tgz` into the `headless` profile.
 - Real SSH: the host connected to `dshlab@127.0.0.1` through a temporary OpenSSH alias. The remote project lived at `/home/dshlab/project` with mode `0700`, so the host user could not read it locally. The alias and test user were removed after acceptance.
 - No production profile, workspace mapping, SSH configuration or remote file was used.
 
@@ -22,7 +22,7 @@ The Session header was the bare remote POSIX path, so `grep` ran as the local us
 
 ## After the fix
 
-Same runtime and anchor, with the candidate package:
+Same runtime and anchor, with the locally packed branch package:
 
 ```console
 {"type":"session","sessionId":"session-f77c…","cwd":"<isolated DSH_HOME>/ssh-workspace-anchors/project · dshlab [e0d2659f]"}
@@ -90,8 +90,8 @@ The symlink and subagent-`..` rows are documented boundaries, not regressions in
 - `npm run build`: TypeScript Host/Client projects and the client bundle completed; committed `lib` artifacts updated by the build. A second build produced no additional changes.
 - `node scripts/check-docs.mjs`: local documentation links and version references verified.
 - `node scripts/check-dsh-sdk.mjs 0.2.2-rc.3`: SDK types and the full regression suite for the newer runtime (67 files passed, 2 skipped; 694 tests passed, 9 skipped). A routing-only run of the same SDK also passed (6 files, 107 tests).
-- `npm run release:pack -- --out <new-directory>`: built the real `0.13.9` archive, validated shipped assets, helper hash and package version.
-- `npm run test:install -- --dsh-version 0.2.1-rc.2 --package <candidate .tgz>`: installed the archive into an isolated profile; Web booted with the plugin enabled, then after disable/remove. The installer did not place Host SDK peers in the profile.
+- `npm run release:pack -- --out <new-directory>`: built a local archive from the branch, validated shipped assets and helper hash. This was a local package check only; no GitHub Release or tag was created.
+- `npm run test:install -- --dsh-version 0.2.1-rc.2 --package <local .tgz>`: installed the local archive into an isolated profile; Web booted with the plugin enabled, then after disable/remove. The installer did not place Host SDK peers in the profile.
 
 ## Boundaries
 
