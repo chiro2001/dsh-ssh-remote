@@ -131,6 +131,38 @@ describe('remote Workspace routing', () => {
     expect(fs.processPathFromHostPath('/anchors/project/src')).toBeUndefined();
   });
 
+  it('keeps the headless Session cwd probe on the local SSH anchor', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'dsh-headless-cwd-'));
+    const anchor = join(base, 'anchors', 'project');
+    mkdirSync(anchor, { recursive: true });
+    const previous = process.cwd();
+    process.chdir(anchor);
+    const fs = fakeFileSystem();
+    const helpers = fakeHelpers();
+    const helperClient = vi.spyOn(helpers, 'client');
+    const restore = installRemoteFileSystemRouter(
+      fs as never,
+      path => path === anchor ? 'ssh://gpu/home/atlas/project' : undefined,
+      helpers as never,
+    );
+    try {
+      // DSH headless seeds the Session header with fs.processPath(fs.resolve(".")).
+      // Keeping the local anchor here lets the working-directory router recover
+      // the SSH identity instead of persisting a bare remote POSIX path.
+      const current = await fs.resolve('.');
+      expect(String(current.targetKey)).toBe(`local:${anchor}`);
+      expect(fs.processPath(current)).toBe('local');
+      // A named relative path still goes through the normal local provider.
+      const relative = await fs.resolve('src');
+      expect(String(relative.targetKey)).toBe('local:src');
+      expect(helperClient).not.toHaveBeenCalled();
+    } finally {
+      restore();
+      process.chdir(previous);
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
   it('fails closed for remote writes under read-only or outside-workspace policy', async () => {
     const fs = fakeFileSystem();
     Object.defineProperty(fs, 'sandboxMode', { value: 'workspace-write' });

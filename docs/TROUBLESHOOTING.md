@@ -51,6 +51,14 @@ English: the sandbox probe executes `--bind-fd`, PID namespaces and private `/tm
 
 English: 0.13.4 adapts the official working-directory service so child initialization and `cd` retain SSH identity. Existing POSIX-only cwd state is repaired through the public setter when the original Session workspace still has its mapping. No host is guessed from a bare path, and local Sessions remain local. This does not require reinstalling ripgrep or changing SSH configuration.
 
+## headless / CLI 会话的搜索仍在本机 / Headless Session search runs locally
+
+`dsh headless`（以及同样从工作目录推导会话目录的 CLI 入口）从 SSH 工作区启动时，DSH 会用 `fs.processPath(await fs.resolve("."))` 写会话 header。旧版插件把 anchor 规范化成裸远端 POSIX 路径，后续 glob/grep 就把它当成本机目录；在 `ssh localhost` 上路径恰好相同，所以本地执行也可能返回看似正确的结果。
+
+0.13.9 起保留本地 anchor 作为会话身份，再由官方工作目录服务按原主机路由。升级后从同一 SSH 工作区重新启动 headless 会话即可。若会话 header 已在旧版保存为裸 POSIX 路径，插件不能仅凭路径猜主机；请从对应 SSH 工作区新建会话。不要为了“修好搜索”把远端项目复制到 anchor，或把 cwd 改成本机副本。
+
+English: a headless/CLI Session started from an SSH workspace anchor is seeded through `fs.processPath(await fs.resolve("."))`. Older builds persisted the bare remote POSIX path, so later glob/grep treated it as a local directory; with `ssh localhost` that local path can even return plausible results. 0.13.9 keeps the local anchor as the Session identity and lets the official working-directory service restore the host. Start a new headless Session from the same SSH workspace after upgrading. A header already persisted as a bare POSIX path cannot be assigned a host by guessing; create a fresh Session from the SSH workspace instead. Do not copy the remote project into the anchor or point cwd at a local copy.
+
 ## 与 DSH-better-sidebar 同时使用 / Using DSH-better-sidebar
 
 [Issue #40](https://github.com/CrazyShout/dsh-ssh-remote/issues/40)：第三方文件树可能只显示空目录，代码文件也可能打不开。
